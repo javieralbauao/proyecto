@@ -1,0 +1,33 @@
+---
+- hosts: vm
+  become: yes
+
+  tasks:
+    - name: Crear usuarios requeridos
+      user:
+        name: "{{ item.name }}"
+        password: "{{ item.pass | password_hash('sha512') }}"
+        shell: /bin/bash
+      loop:
+        - { name: 'admin', pass: 'Admin1234!' }
+        - { name: 'tester', pass: 'Tester1234!' }
+        - { name: 'appUser', pass: 'AppUser1234!' }
+
+    - name: Instalar paquetes requeridos
+      apt:
+        name:
+          - nginx
+          - prometheus
+          - grafana
+        state: present
+        update_cache: yes
+
+    - name: Habilitar y arrancar servicios
+      systemd:
+        name: "{{ item }}"
+        enabled: yes
+        state: started
+      loop:
+        - nginx
+        - prometheus
+        - grafana-server
