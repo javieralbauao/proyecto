@@ -1,0 +1,105 @@
+---
+- hosts: all
+  become: yes
+  tasks:
+    # Tarea común para ambas VMs (opcional)
+    - name: Actualizar caché de paquetes APT
+      apt:
+        update_cache: yes
+      tags:
+        - web
+        - monitoring
+
+    # ===========================
+    #  SECCIÓN: Servidor web
+    # ===========================
+    - name: Instalar Nginx
+      apt:
+        name: nginx
+        state: present
+      tags:
+        - web
+
+    - name: Habilitar y arrancar Nginx
+      service:
+        name: nginx
+        state: started
+        enabled: yes
+      tags:
+        - web
+
+    - name: Copiar página web personalizada
+      copy:
+        src: files/web/index.html
+        dest: /var/www/html/index.html
+        owner: www-data
+        group: www-data
+        mode: '0644'
+      tags:
+        - web
+
+    # ===========================
+    #  SECCIÓN: Prometheus + Grafana
+    # ===========================
+    - name: Instalar dependencias para repos HTTPS
+      apt:
+        name:
+          - apt-transport-https
+          - software-properties-common
+          - wget
+        state: present
+      tags:
+        - monitoring
+
+    - name: Instalar Prometheus desde los repositorios de Ubuntu
+      apt:
+        name: prometheus
+        state: present
+      tags:
+        - monitoring
+        
+    - name: Asegurar que ca-certificates está instalado
+      apt:
+        name: ca-certificates
+        state: latest
+      tags:
+        - monitoring
+        
+    - name: Agregar llave GPG de Grafana (repo oficial)
+      apt_key:
+        url: https://apt.grafana.com/gpg.key
+        state: present
+        validate_certs: no 
+      tags:
+        - monitoring
+
+    - name: Agregar repositorio APT de Grafana
+      apt_repository:
+        repo: "deb https://apt.grafana.com stable main"
+        state: present
+      tags:
+        - monitoring
+
+    - name: Actualizar caché de paquetes después de agregar repo Grafana
+      apt:
+        update_cache: yes
+      tags:
+        - monitoring
+
+    - name: Instalar Grafana
+      apt:
+        name: grafana
+        state: present
+      tags:
+        - monitoring
+
+    - name: Habilitar y arrancar servicios de Prometheus y Grafana
+      service:
+        name: "{{ item }}"
+        state: started
+        enabled: yes
+      with_items:
+        - prometheus
+        - grafana-server
+      tags:
+        - monitoring
