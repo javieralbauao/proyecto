@@ -1,196 +1,277 @@
-A. Comandos en el HOST (Git Bash, Windows)
+# Proyecto final – Segunda parte  
+_Sistemas Operativos_
 
-# 1. Ir a la carpeta del proyecto
-cd "/c/uao/2025-6B/Sistemas Operativos/Entrega Proyecto Parte 1/VagrantVM/proyecto_vm"
+Este archivo describe cómo ejecutar la **segunda parte del proyecto final de Sistemas Operativos** usando el código de este repositorio.
 
-# 2. Ver que estás en la carpeta correcta
-pwd
-ls
+El objetivo es crear un entorno de pruebas con **Vagrant + Ansible** que levante dos máquinas virtuales Linux:
 
-# 3. Mostrar versiones (rúbrica: entorno listo)
+- `web`: servidor web con **Nginx**.
+- `monitoring`: servidor de monitoreo con **Prometheus** y **Grafana**.
+
+Todo el aprovisionamiento se realiza de forma automática al ejecutar `vagrant up`.
+
+---
+
+## 1. Requisitos previos
+
+En la máquina **host** (Windows, Linux o macOS) se requiere:
+
+- VirtualBox  
+- Vagrant  
+- Git (para clonar este repositorio)
+
+> **Nota:** No es necesario instalar Ansible en el host. Se usa el provisioner `ansible_local`, que instala Ansible dentro de cada máquina virtual.
+
+Para comprobar versiones (opcional):
+
+```bash
 vagrant --version
-"/c/Program Files/Oracle/VirtualBox/VBoxManage.exe" --version
+VBoxManage --version   # en Windows
+```
 
-# 4. (Opcional, si quieres mostrar recreación) destruir VM
-vagrant destroy -f
+---
 
-# 5. Levantar la VM
+## 2. Clonar el repositorio
+
+En la consola de tu preferencia (Git Bash / PowerShell / terminal):
+
+```bash
+git clone https://github.com/javieralbauao/proyecto.git
+cd proyecto
+```
+
+Al entrar a la carpeta deberías ver algo como:
+
+- `.vagrant/` (se crea o rellena cuando se levanten las VMs)
+- `files/`
+- `ssh_keys/`
+- `README.md`
+- `Vagrantfile`
+- `inventory`
+- `playbook.yml`
+- `prueba_admin.txt`
+- `setup.sh`
+- `site.yml`
+
+Los archivos importantes para **la segunda parte del proyecto** son principalmente:
+
+- `Vagrantfile`
+- `site.yml`
+- Carpeta `files/` (contiene el `index.html` personalizado del servidor web)
+
+`playbook.yml`, `setup.sh`, `inventory`, `ssh_keys` y `prueba_admin.txt` pertenecen al **Lab 6 / primera parte** y se mantienen como referencia histórica.
+
+---
+
+## 3. Descripción de la arquitectura
+
+El `Vagrantfile` define **dos máquinas virtuales**:
+
+### VM `web`
+
+- Box base: `minimal/xenial64`
+- Hostname: `web`
+- IP de red privada: `192.168.56.10`
+- Puertos redirigidos:
+  - `host: 8080 → guest: 80` (Nginx)
+- Memoria: 1024 MB
+- Provisioners:
+  - `shell`: instala Ansible en la VM.
+  - `ansible_local` con `site.yml` y tag `web`.
+
+### VM `monitoring`
+
+- Box base: `minimal/xenial64`
+- Hostname: `monitoring`
+- IP de red privada: `192.168.56.11`
+- Puertos redirigidos:
+  - `host: 9090 → guest: 9090` (Prometheus)
+  - `host: 3000 → guest: 3000` (Grafana)
+- Memoria: 2048 MB
+- Provisioners:
+  - `shell`: instala Ansible en la VM.
+  - `ansible_local` con `site.yml` y tag `monitoring`.
+
+El playbook `site.yml` contiene:
+
+- Tareas con tag `web` → instalación y configuración de **Nginx** + copia de `index.html`.
+- Tareas con tag `monitoring` → instalación y configuración de **Prometheus** y **Grafana**.
+
+---
+
+## 4. Levantar el entorno del proyecto
+
+Desde la carpeta del repositorio:
+
+```bash
+# Levantar las dos máquinas
 vagrant up
+```
 
-# 6. Verificar que está corriendo
+Esto hará:
+
+1. Crear/arrancar las VMs `web` y `monitoring`.
+2. Instalar Ansible dentro de cada VM (provisioner `shell`).
+3. Ejecutar el playbook `site.yml` mediante `ansible_local`:
+   - En `web` solo las tareas con tag `web`.
+   - En `monitoring` solo las tareas con tag `monitoring`.
+
+Para verificar el estado de las máquinas:
+
+```bash
 vagrant status
+```
 
-# 7. Entrar a la VM
-vagrant ssh
+Si alguna vez quieres apagar las VMs:
 
-B. Dentro de la VM – Información básica
-# 1. Ver hostname
-hostname
+```bash
+vagrant halt
+```
 
-# 2. Ver interfaces de red
-ip a
+Y para destruirlas completamente (reiniciar todo desde cero):
 
-# (Puedes buscar la IP 192.168.56.30 en alguna interfaz host-only)
+```bash
+vagrant destroy -f
+```
 
-C. Usuarios y grupo app-users
+> **Posible problema de puertos:**  
+> Si en tu host ya hay algo usando los puertos `8080`, `9090` o `3000`, Vagrant mostrará un error de “port collision”. En ese caso, edita el `Vagrantfile` y cambia el valor `host:` por un puerto libre (por ejemplo 8081, 9091, 3001).
 
-# 1. Ver info de los usuarios
-getent passwd admin tester appuser
+---
 
-# 2. Ver el grupo app-users y sus miembros
-getent group app-users
+## 5. Acceso a las máquinas virtuales
 
-# 3. Ver grupos de cada usuario
-groups admin
-groups tester
-groups appuser
+Para conectarte por SSH a cada VM:
 
-D. Carpeta /data y permisos
+```bash
+# VM servidor web
+vagrant ssh web
 
-# 1. Ver permisos y dueño de /data
-ls -ld /data 
-# Salida esperada : drwxr-x--- 1 admin app-users ... /data
+# VM de monitoreo
+vagrant ssh monitoring
+```
 
-# 2. Como admin (debe poder escribir)
-su - admin
-cd /data
-touch prueba_admin.txt
-ls -l
-exit
+Dentro de la VM verás un prompt similar a:
 
-# 3. Como tester (solo lectura/ejecución, el touch IDEALMENTE debe fallar)
-su - tester
-cd /data
-ls -l
-touch prueba_tester.txt
-exit
+```bash
+vagrant@web:~$
+vagrant@monitoring:~$
+```
 
-# 4. Como appuser (igual que tester)
-su - appuser
-cd /data
-ls -l
-touch prueba_appuser.txt
-exit
+---
 
-# E. Instalación y prueba de Nginx, Prometheus y Grafana
-# Todo esto es dentro de la VM como usuario vagrant (o con sudo).
+## 6. Pruebas desde el navegador (host)
 
-# 1. Actualizar sistema
+Con las máquinas levantadas (`vagrant up`):
 
-sudo apt update
-sudo apt upgrade -y    # opcional pero queda bien en el video
+### 6.1 Servidor web (Nginx)
 
-# 2. Instalar Nginx
+En el navegador de tu host:
 
-sudo apt install -y nginx
+```text
+http://localhost:8080
+```
 
-# Ver estado
+Debería mostrarse la página `index.html` personalizada que se copia desde `files/...` al directorio `/var/www/html/index.html` de la VM `web`.
+
+### 6.2 Prometheus
+
+En el navegador:
+
+```text
+http://localhost:9090
+```
+
+Debería aparecer la interfaz de **Prometheus**, ejecutándose en la VM `monitoring`.
+
+### 6.3 Grafana
+
+En el navegador:
+
+```text
+http://localhost:3000
+```
+
+Se abre la interfaz de **Grafana**.  
+Las credenciales por defecto suelen ser:
+
+- Usuario: `admin`
+- Contraseña: `admin` (puede pedir cambio en el primer inicio).
+
+---
+
+## 7. Comandos para el servidor web (Nginx)
+
+Estas instrucciones se piden explícitamente en la rúbrica.  
+Todos los comandos se ejecutan **dentro de la VM `web`**:
+
+```bash
+vagrant ssh web
+```
+
+### Ver estado del servicio
+
+```bash
 sudo systemctl status nginx
+```
 
-# Prueba desde la VM
-curl http://localhost
+### Iniciar el servidor web
 
-# En el host (fuera de la VM, en el navegador):
+```bash
+sudo systemctl start nginx
+```
 
-# Abre: http://192.168.56.30
-# → muestra página por defecto de Nginx.
+### Detener el servidor web
 
-# 3. Instalar Prometheus
+```bash
+sudo systemctl stop nginx
+```
 
-sudo apt install -y prometheus prometheus-node-exporter prometheus-pushgateway prometheus-alertmanager
+### Reiniciar el servidor web
 
-# Ver estado del servicio principal
-sudo systemctl status prometheus
+```bash
+sudo systemctl restart nginx
+```
 
-# Prueba rápida
-curl http://localhost:9090
+Con esto se pueden tomar capturas de pantalla para demostrar:
 
-# En el host, navegador (chrome)
-Abre: http://192.168.56.30:9090
+- Cómo se consulta el estado.
+- Cómo se inicia, se detiene y se reinicia el servicio del servidor web.
 
-# 4. Instalar Grafana
-# Paquetes necesarios
-sudo apt install -y apt-transport-https software-properties-common wget
+---
 
-# Agregar llave GPG y repositorio
-wget -q -O - https://packages.grafana.com/gpg.key | sudo apt-key add -
-sudo add-apt-repository "deb https://packages.grafana.com/oss/deb stable main"
+## 8. Notas sobre archivos del Lab 6 / primera parte
 
-# Actualizar e instalar Grafana
-sudo apt update
-sudo apt install -y grafana
+En este repositorio también se incluyen algunos archivos usados en el **Laboratorio 6** y en la primera parte del proyecto:
 
-# Habilitar y arrancar servicio
-sudo systemctl enable grafana-server
-sudo systemctl start grafana-server
+- `playbook.yml`  
+  Playbook sencillo utilizado inicialmente para provisionar una sola máquina con Nginx y `cowsay`.
 
-# Ver estado
-sudo systemctl status grafana-server
+- `setup.sh`  
+  Script de shell usado como provisionador en Vagrant (instalación de cowsay y Nginx).
 
+- `inventory`, `ssh_keys/`, `prueba_admin.txt`  
+  Archivos relacionados con prácticas previas (usuarios, claves SSH, pruebas de permisos, etc.).
 
-# En el host, navegador:
+Para la **segunda parte del proyecto**, el flujo recomendado es:
 
-Abre: http://192.168.56.30:3000
-Usuario/clave inicial: admin / admin (puedes mostrar el login aunque no cambies la contraseña en el video para ahorrar tiempo).
+1. Clonar el repositorio.  
+2. Entrar a la carpeta `proyecto`.  
+3. Ejecutar `vagrant up`.  
+4. Probar el servidor web y las herramientas de monitoreo desde el navegador como se describe en las secciones anteriores.
 
-# F. Configuración SSH con llaves (3 usuarios)
-# 1. Comprobar que la clave pública está en la VM (Todavía dentro de la VM:)
+---
 
-ls
+## 9. Cómo reproducir el proyecto para la evaluación
 
-# Deberías ver: id_rsa.pub
+1. Clonar este repositorio.  
+2. Entrar a la carpeta `proyecto`.  
+3. Ejecutar `vagrant up`.  
+4. Esperar a que se completen los provisionamientos de `web` y `monitoring`.  
+5. Verificar:
+   - `http://localhost:8080` → Nginx funcionando.  
+   - `http://localhost:9090` → Prometheus disponible.  
+   - `http://localhost:3000` → Grafana disponible.  
+6. Usar los comandos de la sección 7 para mostrar cómo se controla el servicio Nginx.
 
-# 2. Crear .ssh y authorized_keys para cada usuario
-
-# Para admin
-sudo mkdir -p /home/admin/.ssh
-sudo cp /home/vagrant/id_rsa.pub /home/admin/.ssh/authorized_keys
-sudo chown -R admin:admin /home/admin/.ssh
-sudo chmod 700 /home/admin/.ssh
-sudo chmod 600 /home/admin/.ssh/authorized_keys
-
-# Para tester
-sudo mkdir -p /home/tester/.ssh
-sudo cp /home/vagrant/id_rsa.pub /home/tester/.ssh/authorized_keys
-sudo chown -R tester:tester /home/tester/.ssh
-sudo chmod 700 /home/tester/.ssh
-sudo chmod 600 /home/tester/.ssh/authorized_keys
-
-# Para appuser
-sudo mkdir -p /home/appuser/.ssh
-sudo cp /home/vagrant/id_rsa.pub /home/appuser/.ssh/authorized_keys
-sudo chown -R appuser:appuser /home/appuser/.ssh
-sudo chmod 700 /home/appuser/.ssh
-sudo chmod 600 /home/appuser/.ssh/authorized_keys
-
-
-# Opcional, para mostrar en el video:
-
-ls -R /home/admin/.ssh
-ls -R /home/tester/.ssh
-ls -R /home/appuser/.ssh
-
-# G. Probar SSH desde el HOST para cada usuario
-# Sal de la VM:
-
-exit
-
-# Ya en Git Bash, en la carpeta del proyecto:
-
-cd "/c/uao/2025-6B/Sistemas Operativos/Entrega Proyecto Parte 1/VagrantVM/proyecto_vm"
-
-# 1. Como admin
-ssh -i ssh_keys/id_rsa admin@192.168.56.30
-whoami
-pwd
-exit
-
-# 2. Como tester
-ssh -i ssh_keys/id_rsa tester@192.168.56.30
-whoami
-exit
-
-# 3. Como appuser
-ssh -i ssh_keys/id_rsa appuser@192.168.56.30
-whoami
-exit
+Con estos pasos, cualquier persona que descargue el repositorio puede levantar y comprobar el entorno de la **segunda parte del proyecto final** sin necesidad de configuración manual adicional.
