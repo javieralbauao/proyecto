@@ -1,33 +1,25 @@
 ---
-- hosts: vm
+- hosts: all
   become: yes
-
   tasks:
-    - name: Crear usuarios requeridos
-      user:
-        name: "{{ item.name }}"
-        password: "{{ item.pass | password_hash('sha512') }}"
-        shell: /bin/bash
-      loop:
-        - { name: 'admin', pass: 'Admin1234!' }
-        - { name: 'tester', pass: 'Tester1234!' }
-        - { name: 'appUser', pass: 'AppUser1234!' }
-
-    - name: Instalar paquetes requeridos
+    - name: Actualizar índice de paquetes
       apt:
-        name:
-          - nginx
-          - prometheus
-          - grafana
-        state: present
         update_cache: yes
 
-    - name: Habilitar y arrancar servicios
-      systemd:
-        name: "{{ item }}"
-        enabled: yes
-        state: started
-      loop:
-        - nginx
-        - prometheus
-        - grafana-server
+    - name: Instalar cowsay
+      apt:
+        name: cowsay
+        state: present
+
+    - name: Instalar nginx
+      apt:
+        name: nginx
+        state: present
+
+    - name: Copiar página web personalizada
+      copy:
+        src: files/index.html
+        dest: /var/www/html/index.html
+        owner: www-data
+        group: www-data
+        mode: '0644'

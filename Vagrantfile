@@ -1,19 +1,51 @@
 Vagrant.configure("2") do |config|
 
-  config.vm.box = "ubuntu/focal64"
-  config.vm.hostname = "linux-proyecto"
+  config.vm.define "web" do |web|
+    web.vm.box = "minimal/xenial64"
+    web.vm.hostname = "web"
 
-  config.vm.network "private_network", ip: "192.168.56.30"
+    web.vm.network "private_network", ip: "192.168.56.10"
 
-  config.vm.synced_folder "./data", "/data", create: true
+    web.vm.network "forwarded_port", guest: 80, host: 8080
 
-  config.vm.provider "virtualbox" do |vb|
-    vb.memory = "4096"
-    vb.cpus = 2
+    web.vm.provider "virtualbox" do |vb|
+      vb.memory = 1024
+    end
+
+    web.vm.provision "shell", inline: <<-SHELL
+      sudo apt-get update -y
+      sudo apt-get install -y ansible
+    SHELL
+
+    web.vm.provision "ansible_local" do |ansible|
+      ansible.install  = false  
+      ansible.playbook = "site.yml"
+      ansible.tags     = ["web"]
+    end
   end
 
-  config.vm.provision "file",
-    source: "./ssh_keys/id_rsa.pub",
-    destination: "/home/vagrant/id_rsa.pub"
+  config.vm.define "monitoring" do |mon|
+    mon.vm.box = "minimal/xenial64"
+    mon.vm.hostname = "monitoring"
 
+    mon.vm.network "private_network", ip: "192.168.56.11"
+
+    mon.vm.network "forwarded_port", guest: 9090, host: 9090
+    mon.vm.network "forwarded_port", guest: 3000, host: 3000
+
+    mon.vm.provider "virtualbox" do |vb|
+      vb.memory = 2048
+    end
+
+    mon.vm.provision "shell", inline: <<-SHELL
+      sudo apt-get update -y
+      sudo apt-get install -y ansible
+    SHELL
+	
+    mon.vm.provision "ansible_local" do |ansible|
+      ansible.install  = false
+      ansible.playbook = "site.yml"
+      ansible.tags     = ["monitoring"]
+    end
+  end
 end
