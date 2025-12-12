@@ -1,4 +1,5 @@
-# Proyecto final – Segunda parte  
+# Proyecto final – Segunda y tercera parte
+
 _Sistemas Operativos_
 
 Este archivo describe cómo ejecutar la **segunda parte del proyecto final de Sistemas Operativos** usando el código de este repositorio.
@@ -274,4 +275,200 @@ Para la **segunda parte del proyecto**, el flujo recomendado es:
    - `http://localhost:3000` → Grafana disponible.  
 6. Usar los comandos de la sección 7 para mostrar cómo se controla el servicio Nginx.
 
-Con estos pasos, cualquier persona que descargue el repositorio puede levantar y comprobar el entorno de la **segunda parte del proyecto final** sin necesidad de configuración manual adicional.
+## 10. Validación de monitoreo – Tercera parte del proyecto
+
+En la **tercera parte del proyecto** se valida el monitoreo de la máquina virtual usando:
+
+- Un **sitio web estático** desplegado en Nginx.
+- **Prometheus** recopilando métricas (web y monitoring).
+- Un **dashboard en Grafana** con visualización de:
+  - Peticiones recibidas (tráfico).
+  - Consumo de memoria.
+  - Consumo de disco.
+
+Toda la lógica sigue usando el mismo `Vagrantfile` y el mismo `site.yml` definidos en este repositorio.
+
+### 10.1 Sitio web estático en Nginx
+
+Los archivos del sitio estático se encuentran en:
+
+- `files/index.html` → página principal personalizada.
+- `files/img/uao.png` → imagen usada en el sitio.
+
+Cuando se ejecuta:
+
+```bash
+vagrant up
+# o
+vagrant provision web
+```
+
+Ansible copia estos archivos a la VM `web` en:
+
+- `/var/www/html/index.html`
+- `/var/www/html/img/uao.png`
+
+Para validar desde el host:
+
+1. Asegúrate de que la VM `web` está arriba:
+
+   ```bash
+   vagrant status
+   ```
+
+2. Abre en el navegador de tu máquina host:
+
+   ```text
+   http://localhost:8080
+   ```
+
+3. Deberías ver **el sitio estático personalizado** (no la página por defecto de Nginx), incluyendo:
+   - El contenido de `index.html`.
+   - La imagen `uao.png`.
+
+---
+
+### 10.2 Verificación de métrica en Prometheus
+
+En la VM `monitoring` se instalan:
+
+- `prometheus`
+- `prometheus-node-exporter`
+
+Además, el archivo `files/prometheus.yml` se copia a `/etc/prometheus/prometheus.yml` y configura dos targets:
+
+- `web-node` → `192.168.56.10:9100`
+- `monitoring-node` → `localhost:9100`
+
+Para validar desde el host:
+
+1. Asegúrate de que la VM `monitoring` está arriba:
+
+   ```bash
+   vagrant status
+   ```
+
+2. Abre en el navegador:
+
+   ```text
+   http://localhost:9090
+   ```
+
+3. En la interfaz de Prometheus:
+
+   - Ve a **Status → Targets**.
+   - Deberías ver los jobs, por ejemplo:
+     - `web-node` con `192.168.56.10:9100` en estado **UP**.
+     - `monitoring-node` con `localhost:9100` en estado **UP**.
+
+4. Puedes probar algunas consultas de ejemplo (en la pestaña **Graph**):
+
+   - **Memoria disponible (bytes)**:
+
+     ```promql
+     node_memory_MemAvailable_bytes
+     ```
+
+   - **Uso de disco en `/` (tamaño total)**:
+
+     ```promql
+     node_filesystem_size_bytes{mountpoint="/", fstype=~"ext4|xfs"}
+     ```
+
+   - **Espacio libre en `/`**:
+
+     ```promql
+     node_filesystem_free_bytes{mountpoint="/", fstype=~"ext4|xfs"}
+     ```
+
+Usar estas consultas sirve para comprobar que Prometheus está recibiendo y almacenando métricas correctamente.
+
+---
+
+### 10.3 Configuración del dashboard en Grafana
+
+Grafana está desplegado en la VM `monitoring` y se expone en el puerto 3000 del host.
+
+1. En el navegador del host abre:
+
+   ```text
+   http://localhost:3000
+   ```
+
+2. Inicia sesión (por defecto):
+
+   - Usuario: `admin`
+   - Contraseña: `admin` (puede pedirte cambiarla la primera vez).
+
+#### 10.3.1 Agregar Prometheus como origen de datos
+
+1. En el menú izquierdo ve a **Configuration → Data sources → Add data source**.
+2. Selecciona **Prometheus**.
+3. En el campo **URL** escribe:
+
+   ```text
+   http://localhost:9090
+   ```
+
+4. Haz clic en **Save & test** y verifica que Grafana muestre **"Data source is working"**.
+
+#### 10.3.2 Crear el dashboard con las métricas solicitadas
+
+Crea un nuevo dashboard:
+
+1. Menú izquierdo → **Dashboards → New → New dashboard**.
+2. Añade paneles usando el origen de datos Prometheus.
+
+A continuación se proponen 3 paneles para cumplir con la consigna de la tercera parte:
+
+##### Panel 1: Peticiones recibidas (tráfico de red)
+
+- **Título del panel:** `Peticiones recibidas (tráfico)`
+- **Tipo de visualización:** `Time series` (línea).
+- **Consulta PromQL de ejemplo:**
+
+  ```promql
+  rate(node_network_receive_bytes_total{instance="192.168.56.10:9100"}[5m])
+  ```
+
+Esto muestra el **tráfico de entrada** (bytes por segundo) hacia la VM `web`.
+
+##### Panel 2: Consumo de memoria (%)
+
+- **Título del panel:** `Uso de memoria (%)`
+- **Tipo de visualización:** `Gauge` o `Time series`.
+- **Consulta PromQL (porcentaje usado en la VM web):**
+
+  ```promql
+  (1 - (node_memory_MemAvailable_bytes{instance="192.168.56.10:9100"} 
+        / node_memory_MemTotal_bytes{instance="192.168.56.10:9100"})) * 100
+  ```
+
+##### Panel 3: Consumo de disco en `/` (%)
+
+- **Título del panel:** `Uso de disco en / (%)`
+- **Tipo de visualización:** `Gauge` o `Bar gauge`.
+- **Consulta PromQL:**
+
+  ```promql
+  (1 - (node_filesystem_free_bytes{instance="192.168.56.10:9100", mountpoint="/", fstype=~"ext4|xfs"}
+        / node_filesystem_size_bytes{instance="192.168.56.10:9100", mountpoint="/", fstype=~"ext4|xfs"})) * 100
+  ```
+
+---
+
+### 10.4 Qué mostrar en la documentación y el video
+
+Para la **tercera parte**, puedes incluir:
+
+- Captura del sitio estático en `http://localhost:8080`.
+- Capturas de Prometheus:
+  - Página de **Targets** con los endpoints `UP`.
+  - Alguna consulta de ejemplo.
+- Capturas de Grafana:
+  - Data source Prometheus configurado.
+  - Dashboard con los 3 paneles:
+    - Peticiones/Tráfico.
+    - Consumo de memoria.
+    - Consumo de disco.
+
