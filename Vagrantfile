@@ -5,7 +5,6 @@ Vagrant.configure("2") do |config|
     web.vm.hostname = "web"
 
     web.vm.network "private_network", ip: "192.168.56.10"
-
     web.vm.network "forwarded_port", guest: 80, host: 8080
 
     web.vm.provider "virtualbox" do |vb|
@@ -18,7 +17,7 @@ Vagrant.configure("2") do |config|
     SHELL
 
     web.vm.provision "ansible_local" do |ansible|
-      ansible.install  = false  
+      ansible.install  = false
       ansible.playbook = "site.yml"
       ansible.tags     = ["web"]
     end
@@ -29,7 +28,6 @@ Vagrant.configure("2") do |config|
     mon.vm.hostname = "monitoring"
 
     mon.vm.network "private_network", ip: "192.168.56.11"
-
     mon.vm.network "forwarded_port", guest: 9090, host: 9090
     mon.vm.network "forwarded_port", guest: 3000, host: 3000
 
@@ -41,7 +39,7 @@ Vagrant.configure("2") do |config|
       sudo apt-get update -y
       sudo apt-get install -y ansible
     SHELL
-	
+
     mon.vm.provision "ansible_local" do |ansible|
       ansible.install  = false
       ansible.playbook = "site.yml"
